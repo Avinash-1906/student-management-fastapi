@@ -75,6 +75,27 @@ def update_student(
     
     return {"msg" : "no updates"}
 
+@app.patch("/students/{student_id}")
+def patch_student(
+    student_id: str,
+    student: StudentUpdate,
+    collection: Collection = Depends(get_student_collection)
+):
+    student_dict = student.model_dump(exclude_unset=True)
+
+    result = collection.update_one(
+        {"_id": ObjectId(student_id)},
+        {"$set": student_dict}
+    )
+
+    if result.matched_count == 0:
+        return {"msg": "Student not found"}
+
+    if result.modified_count == 0:
+        return {"msg": "No changes made"}
+
+    return {"msg": "Student updated successfully"}
+
 @app.delete("/students/{student_id}")
 def delete_student(
     student_id : str,
