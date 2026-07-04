@@ -4,15 +4,16 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from database import user_collection
+from config import SECRET_KEY
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto"
 )
 
-SECRET_KEY = "mysecretkey123"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -39,6 +40,23 @@ def create_access_token(data: dict):
 
     return encoded_jwt
 
+def create_refresh_token(data: dict):
+    to_encode = data.copy()
+
+    expire = datetime.utcnow() + timedelta(
+        days=REFRESH_TOKEN_EXPIRE_DAYS
+    )
+
+    to_encode.update({"exp": expire})
+
+    refresh_token = jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
+    return refresh_token
+
 def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(
@@ -48,6 +66,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         )
 
         username = payload.get("sub")
+        role = payload.get("role")
 
         if username is None:
             raise HTTPException(
@@ -70,3 +89,13 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
+    
+def get_current_admin(current_user=Depends(get_current_user)):
+
+    if current_user["role"] != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can perform this action"
+        )
+
+    return current_user
