@@ -7,3 +7,4 @@ db = client[DATABASE_NAME]
 
 student_collection = db["students"]
 user_collection = db["users"]
+idempotency_collection = db["idempotency_keys"]

@@ -1,28 +1,57 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
 from pymongo.collection import Collection
 from bson import ObjectId
-from services.student_service import create_student, get_all_students, get_student, update_student, patch_student, delete_student
+from services.student_service import (
+    create_student,
+    get_all_students,
+    get_student,
+    update_student,
+    patch_student,
+    delete_student,
+    upload_student_file
+)
 
-from auth import get_current_admin
+from websocket_manager import manager
+from auth import get_current_admin, get_current_user
 from schemas import StudentCreate, StudentUpdate, StudentResponse
-from dependencies import get_student_collection
+from dependencies import get_student_collection, get_idempotency_collection, get_user_collection
 
 student_router = APIRouter(
     prefix="/students",
     tags=["Students"]
 )
 
+print("========== STUDENT ROUTER LOADED ==========")
 
 @student_router.post("")
-def add_student(
-    student: StudentCreate,
-    collection: Collection = Depends(get_student_collection)
-):
+async def add_student(
 
-    return create_student(
+    student: StudentCreate,
+
+    idempotency_key: str = Header(...),
+
+    student_collection: Collection = Depends(get_student_collection),
+
+    idempotency_collection: Collection = Depends(get_idempotency_collection)
+
+):
+    
+    print("========== NEW ADD_STUDENT ==========")
+    print(idempotency_key)
+
+    result, is_new = create_student(
         student,
-        collection
+        idempotency_key,
+        student_collection,
+        idempotency_collection
     )
+
+    if is_new:
+        await manager.broadcast(
+            f"New student added: {student.name}"
+        )
+
+    return result
 
 @student_router.get("", response_model=list[StudentResponse])
 def find_all_students(
@@ -69,6 +98,7 @@ def find_student(
 def update_student_route(
     student_id: str,
     student: StudentUpdate,
+    current_user=Depends(get_current_user),
     collection: Collection = Depends(get_student_collection)
 ):
 
@@ -83,6 +113,7 @@ def update_student_route(
 def patch_student_route(
     student_id: str,
     student: StudentUpdate,
+    current_user=Depends(get_current_user),
     collection: Collection = Depends(get_student_collection)
 ):
 
@@ -104,3 +135,9 @@ def delete_student_route(
         student_id,
         collection
     )
+
+@student_router.post("/upload")
+def upload_student_file(
+    file: UploadFile = File(...)
+):
+    return upload_student_file(file)
